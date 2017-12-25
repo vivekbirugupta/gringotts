@@ -36,6 +36,18 @@ defmodule Gringotts.Gateways.AuthorizeNetTest do
     ref_id: "123456", 
     payment: %{card: %{number: "5424000000000015", year: 2020, month: 12}}
   ]
+  @opts_store [
+    config: %{name: "64jKa6NA", transaction_key: "4vmE338dQmAN6m7B"}, 
+    profile: %{merchant_customer_id: "123456", description: "Profile description here", email: "customer-profile-email@here.com"}
+  ]
+  @opts_store_no_profile [
+    config: %{name: "64jKa6NA", transaction_key: "4vmE338dQmAN6m7B"}, 
+  ]
+  @opts_refund [
+    config: %{name: "64jKa6NA", transaction_key: "4vmE338dQmAN6m7B"}, 
+    ref_id: "123456", 
+    payment: %{card: %{number: "5424000000000015", year: 2020, month: 12}}
+  ]
   @opts_refund_bad_payment [
     config: %{name: "64jKa6NA", transaction_key: "4vmE338dQmAN6m7B"}, 
     ref_id: "123456", 
@@ -55,6 +67,10 @@ defmodule Gringotts.Gateways.AuthorizeNetTest do
   @unstore_id "1813991490"
   @capture_id "60036752756"
   @capture_invalid_id "60036855211"
+
+  @refund_id "60036752756"
+  @void_id "60036855217"
+  @unstore_id "1813991490"
 
   describe "purchase" do
     test "successful response with right params" do
