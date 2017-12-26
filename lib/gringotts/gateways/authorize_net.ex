@@ -390,8 +390,6 @@ defmodule Gringotts.Gateways.AuthorizeNet do
   defp respond({:ok, %{body: body, status_code: 200}}) do
     raw_response  = naive_map(body)
     cond do
-      raw_response[@response_type[:auth_response]] ->
-        response_check(raw_response[@response_type[:auth_response]], raw_response)
       raw_response[@response_type[:transaction_response]] ->
         response_check(raw_response[@response_type[:transaction_response]], raw_response)
       raw_response[@response_type[:error_response]] ->
