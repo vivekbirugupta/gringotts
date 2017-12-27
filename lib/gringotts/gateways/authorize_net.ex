@@ -406,15 +406,15 @@ defmodule Gringotts.Gateways.AuthorizeNet do
   defp respond({:error, %{body: body, status_code: code}}) do
     {:error, Response.error(raw: body, code: code)}
   end
- 
+
   # Functions to send successful and error responses depending on message received
   # from gateway.
 
-  defp response_check( %{"messages" => %{"resultCode" => "Ok"}}, raw_response) do
+  defp response_check(%{"messages" => %{"resultCode" => "Ok"}}, raw_response) do
     {:ok, Response.success(raw: raw_response)}
   end
 
-  defp response_check( %{"messages" => %{"resultCode" => "Error"}}, raw_response) do
+  defp response_check(%{"messages" => %{"resultCode" => "Error"}}, raw_response) do
     {:error, Response.error(raw: raw_response)}
   end
 
@@ -429,7 +429,7 @@ defmodule Gringotts.Gateways.AuthorizeNet do
     ])
     |> generate
   end
-  
+
   # function for formatting the request for  normal capture
   defp normal_capture(amount, id, opts, transaction_type) do
     element(:createTransactionRequest,  %{xmlns: @aut_net_namespace}, [
@@ -687,7 +687,76 @@ defmodule Gringotts.Gateways.AuthorizeNet do
       opts[:config][:mode] == :prod -> @production_url
       opts[:config][:mode] == :test -> @test_url
       true -> @test_url
-    end  
+    end
+  end
+
+  defmodule ResponseHandler do
+    @moduledoc false
+    alias Gringotts.Response
+    
+    @response_type %{
+      auth_response: "authenticateTestResponse",
+      transaction_response: "createTransactionResponse",
+      error_response: "ErrorResponse",
+      customer_profile_response: "createCustomerProfileResponse",
+      customer_payment_profile_response: "createCustomerPaymentProfileResponse",
+      delete_customer_profile: "deleteCustomerProfileResponse"
+    }
+
+    def parse_gateway_success(raw_response) do
+      response_type = check_response_type(raw_response)
+      message = raw_response[response_type]["messages"]["message"]["text"]
+      avs_result = raw_response[response_type]["transactionResponse"]["avsResultCode"]
+      cvc_result = raw_response[response_type]["transactionResponse"]["cavvResultCode"]
+
+      []
+        |> status_code(200)
+        |> set_message(message)
+        |> set_avs_result(avs_result)
+        |> set_cvc_result(cvc_result)
+        |> set_params(raw_response)
+        |> set_success(true)
+        |> handle_opts
+    end
+
+    def parse_gateway_error(raw_response) do
+      response_type = check_response_type(raw_response)
+      message = raw_response[response_type]["messages"]["message"]["text"] <> " " <>
+        raw_response[response_type]["transactionResponse"]["errors"]["error"]["errorText"]
+      error_code = raw_response[response_type]["transactionResponse"]["errors"]["error"]["errorCode"]
+
+      []
+        |> status_code(200)
+        |> set_message(message)
+        |> set_error_code(error_code)
+        |> set_success(false)
+        |> handle_opts
+    end
+
+    def check_response_type(raw_response) do
+      cond do
+        raw_response[@response_type[:transaction_response]] -> "createTransactionResponse"
+        raw_response[@response_type[:error_response]] -> "ErrorResponse"
+        raw_response[@response_type[:customer_profile_response]] -> "createCustomerProfileResponse"
+        raw_response[@response_type[:customer_payment_profile_response]] -> "createCustomerPaymentProfileResponse"
+        raw_response[@response_type[:delete_customer_profile]] -> "deleteCustomerProfileResponse"
+      end
+    end
+    
+    defp set_success(opts, value), do: opts ++ [success: value] 
+    defp status_code(opts, code), do: opts ++ [status_code: code]
+    defp set_message(opts, message), do: opts ++ [message: message]
+    defp set_avs_result(opts, result), do: opts ++ [avs_result: result]
+    defp set_cvc_result(opts, result), do: opts ++ [cvc_result: result]
+    defp set_params(opts, raw_response), do: opts ++ [params: raw_response]
+    defp set_error_code(opts, code), do: opts ++ [error_code: code]
+    
+    defp handle_opts(opts) do
+      case Keyword.fetch(opts, :success) do
+        {:ok, true} -> Response.success(opts)
+        {:ok, false} -> Response.error(opts)
+      end
+    end
   end
 
 end
