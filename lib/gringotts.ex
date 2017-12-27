@@ -2,9 +2,26 @@ defmodule Gringotts do
   @moduledoc ~S"""
   Gringotts is a payment gateway integration library supporting many gateway integrations.
   
-  Where the configuration for `Gringotts` must be in your application
-  environment, usually defined in your `config/config.exs`:
-      
+  ## Configuration
+  
+  The configuration for `Gringotts` must be in your application environment, 
+  usually defined in your `config/config.exs` and are **mandatory**:
+
+  **Global Configuration**
+  
+  The global configuration sets the library level configurations to interact with the gateway.
+  If the mode is not set then by 'default' the sandbox account is selected.
+
+  To integrate with the sandbox account set.
+      config :gringotts, :global_config,
+        mode: :test
+  To integrate with the live account set.
+      config :gringotts, :global_config,
+        mode: :prod
+
+  **Gateway Configuration**
+
+  The gateway level configurations are for fields related to a specific gateway. 
       config :Gringotts, Gringotts.Gateways.Stripe,
         adapter: Gringotts.Gateways.Stripe,
         api_key: "sk_test_vIX41hC0sdfBKrPWQerLuOMld",
@@ -255,22 +272,20 @@ defmodule Gringotts do
   This should be done once the payment capture is done and you don't wish to make any
   further deductions for the same card.
 
-      id = "ch_1BYvGkBImdnrXiZwet3aKkQE"
       customer_id = "random_customer"
 
-      Gringotts.unstore(:payment_worker, Gringotts.Gateways.Stripe, customer_id, id)
-
+      Gringotts.unstore(:payment_worker, Gringotts.Gateways.Stripe, customer_id)
   """
-  def unstore(worker, gateway, customer_id, card_id, opts \\ []) do 
+  def unstore(worker, gateway, customer_id, opts \\ []) do 
     validate_config(gateway)
-    call(worker, {:unstore, gateway, customer_id, card_id, opts})
+    call(worker, {:unstore, gateway, customer_id, opts})
   end
 
   # TODO: This is runtime error reporting fix this so that it does compile
   # time error reporting.
   defp validate_config(gateway) do
     # Keep the key name and adapter the same in the config in application
-    config = Application.get_env(:Gringotts, gateway)
+    config = Application.get_env(:gringotts, gateway)
     gateway.validate_config(config)
   end
 end

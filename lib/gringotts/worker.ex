@@ -75,13 +75,15 @@ defmodule Gringotts.Worker do
   @doc """
   Handles call for 'unstore' method
   """
-  def handle_call({:unstore, gateway, customer_id, card_id, opts}, _from, state) do
+  def handle_call({:unstore, gateway, customer_id, opts}, _from, state) do
     {gateway, config} = set_gateway_and_config(gateway)
-    response = gateway.unstore(customer_id, card_id, [{:config, config} | opts])
+    response = gateway.unstore(customer_id, [{:config, config} | opts])
     {:reply, response, state}
   end
 
   defp set_gateway_and_config(request_gateway) do
-    { request_gateway, Application.get_env(:Gringotts, request_gateway) }
+    global_config = Application.get_env(:gringotts, :global_config) || [mode: :test]
+    gateway_config = Application.get_env(:gringotts, request_gateway)
+    {request_gateway, Keyword.merge(global_config, gateway_config)}
   end
 end
