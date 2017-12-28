@@ -403,8 +403,12 @@ defmodule Gringotts.Gateways.AuthorizeNet do
     end
   end
 
-  defp respond({:error, %{body: body, status_code: code}}) do
-    {:error, Response.error(raw: body, code: code)}
+  defp respond({:ok, %{body: body, status_code: code}}) do
+    {:error, Response.error(params: body, error_code: code)}
+  end
+
+  defp respond({:error, %HTTPoison.Error{} = error}) do
+    {:error, Response.error(error_code: error.id, reason: :network_fail?, description: "HTTPoison says '#{error.reason}'")}
   end
 
   # Functions to send successful and error responses depending on message received
@@ -440,14 +444,6 @@ defmodule Gringotts.Gateways.AuthorizeNet do
     |> generate
   end
 
-  # function to format the request as an xml for the authenticate method
-  defp add_auth_request(opts) do
-    element(:authenticateTestRequest, %{xmlns: @aut_net_namespace}, [
-      add_merchant_auth(opts[:config])
-    ])
-    |> generate
-  end
-  
   #function to format the request for normal refund
   defp normal_refund(amount, id, opts, transaction_type) do
     element(:createTransactionRequest, %{xmlns: @aut_net_namespace}, [
@@ -499,7 +495,7 @@ defmodule Gringotts.Gateways.AuthorizeNet do
   end
 
   defp delete_customer_profile(id, opts) do
-    element(:deleteCustomerProfileRequest, %{xmlns: @aut_net_namespace},[
+    element(:deleteCustomerProfileRequest, %{xmlns: @aut_net_namespace}, [
       add_merchant_auth(opts[:config]),
       element(:customerProfileId, id)
     ])
