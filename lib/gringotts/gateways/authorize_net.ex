@@ -86,6 +86,8 @@ defmodule Gringotts.Gateways.AuthorizeNet do
   use Gringotts.Gateways.Base
   use Gringotts.Adapter, required_config: [:name, :transaction_key]
 
+  alias Gringotts.Gateways.AuthorizeNet.ResponseHandler
+
   @test_url "https://apitest.authorize.net/xml/v1/request.api"
   @production_url "https://api.authorize.net/xml/v1/request.api"
   @header [{"Content-Type", "text/xml"}]
@@ -98,20 +100,10 @@ defmodule Gringotts.Gateways.AuthorizeNet do
     void: "voidTransaction"
   }
 
-  @response_type %{
-    auth_response: "authenticateTestResponse",
-    transaction_response: "createTransactionResponse",
-    error_response: "ErrorResponse",
-    customer_profile_response: "createCustomerProfileResponse",
-    customer_payment_profile_response: "createCustomerPaymentProfileResponse",
-    delete_customer_profile: "deleteCustomerProfileResponse"
-  }
-
   @aut_net_namespace "AnetApi/xml/v1/schema/AnetApiSchema.xsd"
 
   alias Gringotts.{
     CreditCard,
-    Address,
     Response
   }
 
@@ -165,7 +157,8 @@ defmodule Gringotts.Gateways.AuthorizeNet do
   """
   @spec purchase(Float, CreditCard.t, Keyword.t) :: tuple
   def purchase(amount, payment, opts) do
-    request_data = add_auth_purchase(amount, payment, opts, @transaction_type[:purchase])
+    request_data = 
+      add_auth_purchase(amount, payment, opts, @transaction_type[:purchase])
     response_data = commit(:post, request_data, opts)
     respond(response_data)
   end
@@ -218,7 +211,8 @@ defmodule Gringotts.Gateways.AuthorizeNet do
   """
   @spec authorize(Float, CreditCard.t, Keyword.t) :: tuple
   def authorize(amount, payment, opts) do
-    request_data = add_auth_purchase(amount, payment, opts, @transaction_type[:authorize])
+    request_data = 
+      add_auth_purchase(amount, payment, opts, @transaction_type[:authorize])
     response_data = commit(:post, request_data, opts)
     respond(response_data)
   end
@@ -352,9 +346,10 @@ defmodule Gringotts.Gateways.AuthorizeNet do
   """
   @spec store(CreditCard.t, Keyword.t) :: tuple
   def store(card, opts) do
-    request_data = cond  do
-      opts[:customer_profile_id] -> create_customer_payment_profile(card, opts) |> generate
-      true -> create_customer_profile(card, opts) |> generate
+    request_data = if opts[:customer_profile_id] do
+      create_customer_payment_profile(card, opts) |> generate
+    else
+      create_customer_profile(card, opts) |> generate
     end
     response_data = commit(:post, request_data, opts)
     respond(response_data)
@@ -386,21 +381,11 @@ defmodule Gringotts.Gateways.AuthorizeNet do
     HTTPoison.request(method, path, payload, headers)
   end
 
-  # Function to return a response 
+  # Function to return a response
   defp respond({:ok, %{body: body, status_code: 200}}) do
     raw_response  = naive_map(body)
-    cond do
-      raw_response[@response_type[:transaction_response]] ->
-        response_check(raw_response[@response_type[:transaction_response]], raw_response)
-      raw_response[@response_type[:error_response]] ->
-        response_check(raw_response[@response_type[:error_response]], raw_response)
-      raw_response[@response_type[:customer_profile_response]] ->
-        response_check(raw_response[@response_type[:customer_profile_response]], raw_response)
-      raw_response[@response_type[:customer_payment_profile_response]] ->
-        response_check(raw_response[@response_type[:customer_payment_profile_response]], raw_response)
-      raw_response[@response_type[:delete_customer_profile]] ->
-        response_check(raw_response[@response_type[:delete_customer_profile]], raw_response)  
-    end
+    response_type = ResponseHandler.check_response_type(raw_response)
+    response_check(raw_response[response_type], raw_response)
   end
 
   defp respond({:ok, %{body: body, status_code: code}}) do
@@ -415,11 +400,11 @@ defmodule Gringotts.Gateways.AuthorizeNet do
   # from gateway.
 
   defp response_check(%{"messages" => %{"resultCode" => "Ok"}}, raw_response) do
-    {:ok, Response.success(raw: raw_response)}
+    {:ok, ResponseHandler.parse_gateway_success(raw_response)}
   end
 
   defp response_check(%{"messages" => %{"resultCode" => "Error"}}, raw_response) do
-    {:error, Response.error(raw: raw_response)}
+    {:error, ResponseHandler.parse_gateway_error(raw_response)}
   end
 
   #------------------- Helper functions for the interface functions-------------------
@@ -544,7 +529,9 @@ defmodule Gringotts.Gateways.AuthorizeNet do
       element(:payment, [
         element(:creditCard, [
           element(:cardNumber, opts[:payment][:card][:number]),
-          element(:expirationDate, join_string([opts[:payment][:card][:year], opts[:payment][:card][:month]], "-"))
+          element(:expirationDate, 
+            join_string([opts[:payment][:card][:year], opts[:payment][:card][:month]], "-")
+          )
         ])
       ]),
       add_ref_trans_id(id)
@@ -717,14 +704,21 @@ defmodule Gringotts.Gateways.AuthorizeNet do
 
     def parse_gateway_error(raw_response) do
       response_type = check_response_type(raw_response)
-      message = raw_response[response_type]["messages"]["message"]["text"] <> " " <>
-        raw_response[response_type]["transactionResponse"]["errors"]["error"]["errorText"]
-      error_code = raw_response[response_type]["transactionResponse"]["errors"]["error"]["errorCode"]
+      
+      {message, error_code} = if raw_response[response_type]["transactionResponse"]["errors"] do
+        {raw_response[response_type]["messages"]["message"]["text"] <> " " <>
+          raw_response[response_type]["transactionResponse"]["errors"]["error"]["errorText"],
+        raw_response[response_type]["transactionResponse"]["errors"]["error"]["errorCode"]}
+      else
+        {raw_response[response_type]["messages"]["message"]["text"],
+        raw_response[response_type]["messages"]["message"]["code"]}
+      end
 
       []
         |> status_code(200)
         |> set_message(message)
         |> set_error_code(error_code)
+        |> set_params(raw_response)
         |> set_success(false)
         |> handle_opts
     end
@@ -753,6 +747,6 @@ defmodule Gringotts.Gateways.AuthorizeNet do
         {:ok, false} -> Response.error(opts)
       end
     end
-  end
 
+  end
 end
