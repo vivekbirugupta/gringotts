@@ -316,6 +316,7 @@ defmodule Gringotts.Gateways.AuthorizeNet do
   can create customer payment profile by passing the `customer_profile_id` in the `opts`.
   The gateway also provide a provision for a `validation mode`, there are two modes `liveMode`
   and `testMode`, to know more about modes [see](https://developer.authorize.net/api/reference/index.html#customer-profiles-create-customer-profile).
+  By default `validation mode` is set to `testMode`.
   
   ## Quirks
   * The current version of this library supports only `credit card` as the payment profile.
@@ -329,7 +330,7 @@ defmodule Gringotts.Gateways.AuthorizeNet do
   ## Optional Fields
       opts = [
         validation_mode: String,
-        billTo: %{
+        bill_to: %{
           first_name: String, last_name: String, company: String, address: String,
           city: String, state: String, zip: String, country: String
         },
@@ -460,7 +461,9 @@ defmodule Gringotts.Gateways.AuthorizeNet do
         add_billing_info(opts),
         add_payment_source(card)
       ]),
-      element(:validationMode, opts[:validation_mode])
+      element(:validationMode, 
+        (if opts[:validation_mode], do: opts[:validation_mode], else: "testMode")
+      )
     ])
   end
 
@@ -472,10 +475,16 @@ defmodule Gringotts.Gateways.AuthorizeNet do
         element(:description, opts[:profile][:description]),
         element(:email, opts[:profile][:description]),
         element(:paymentProfiles, [
-          element(:customerType, (if opts[:customer_type], do: opts[:customer_type], else: "individual")),
+          element(:customerType,
+            (if opts[:customer_type], do: opts[:customer_type], else: "individual")
+          ),
+          add_billing_info(opts),
           add_payment_source(card)
-        ])
-      ])
+        ]),
+      ]),
+      element(:validationMode, 
+        (if opts[:validation_mode], do: opts[:validation_mode], else: "testMode")
+      )      
     ])
   end
 

@@ -48,29 +48,39 @@ defmodule Gringotts.Gateways.AuthorizeNetTest do
       merchant_customer_id: "123456", 
       description: "Profile description here", 
       email: "customer-profile-email@here.com"
-    }
+    },
+    customer_type: "individual",
+    validation_mode: "testMode"
   ]
   @opts_store_no_profile [
     config: %{name: "64jKa6NA", transaction_key: "4vmE338dQmAN6m7B"}, 
   ]
   @opts_refund [
     config: %{name: "64jKa6NA", transaction_key: "4vmE338dQmAN6m7B"}, 
-    ref_id: "123456", 
+    ref_id: "123456",
     payment: %{card: %{number: "5424000000000015", year: 2020, month: 12}}
   ]
   @opts_refund_bad_payment [
-    config: %{name: "64jKa6NA", transaction_key: "4vmE338dQmAN6m7B"}, 
-    ref_id: "123456", 
+    config: %{name: "64jKa6NA", transaction_key: "4vmE338dQmAN6m7B"},
+    ref_id: "123456",
     payment: %{card: %{number: "123", year: 2020, month: 12}}
   ]
   @opts_store [
-    config: %{name: "64jKa6NA", transaction_key: "4vmE338dQmAN6m7B"}, 
-    profile: %{merchant_customer_id: "123456", description: "Profile description here", email: "customer-profile-email@here.com"}
+    config: %{name: "64jKa6NA", transaction_key: "4vmE338dQmAN6m7B"},
+    profile: %{merchant_customer_id: "123456",
+      description: "Profile description here", 
+      email: "customer-profile-email@here.com"
+    }
   ]
   @opts_store_no_profile [
     config: %{name: "64jKa6NA", transaction_key: "4vmE338dQmAN6m7B"}, 
   ]
-
+  @opts_customer_profile [
+    config: %{name: "64jKa6NA", transaction_key: "4vmE338dQmAN6m7B"}, 
+    customer_profile_id: "1814012002",
+    validation_mode: "testMode"    
+  ]
+  
   @refund_id "60036752756"
   @void_id "60036855217"
   @void_invalid_id "60036855211"
@@ -138,7 +148,7 @@ defmodule Gringotts.Gateways.AuthorizeNetTest do
     test "successful response with right params" do
       with_mock HTTPoison,
       [request: fn(_method, _url, _body, _headers) -> MockResponse.successful_capture_response end] do
-        assert {:ok, response} = ANet.capture(@amount, @bad_card, @opts)
+        assert {:ok, response} = ANet.capture(@capture_id, @amount, @opts)
         assert response.params["createTransactionResponse"]["messages"]["resultCode"] == "Ok"
       end
     end
@@ -146,7 +156,7 @@ defmodule Gringotts.Gateways.AuthorizeNetTest do
     test "with bad transaction id" do
       with_mock HTTPoison,
       [request: fn(_method, _url, _body, _headers) -> MockResponse.bad_id_capture end] do
-        assert {:error, response} = ANet.capture(@bad_amount, @card, @opts)
+        assert {:error, response} = ANet.capture(@capture_invalid_id, @amount, @opts)
         assert response.params["createTransactionResponse"]["messages"]["resultCode"] == "Error"
       end
     end
@@ -164,7 +174,7 @@ defmodule Gringotts.Gateways.AuthorizeNetTest do
     test "bad payment params" do
       with_mock HTTPoison,
         [request: fn(_method, _url, _body, _headers) -> MockResponse.bad_card_refund end] do
-          assert {:error, response} = ANet.refund(@amount, @refund_id, @opts_refund)
+          assert {:error, response} = ANet.refund(@amount, @refund_id, @opts_refund_bad_payment)
           assert response.params["ErrorResponse"]["messages"]["resultCode"] == "Error"
       end
     end
@@ -190,7 +200,7 @@ defmodule Gringotts.Gateways.AuthorizeNetTest do
     test "with bad transaction id" do
       with_mock HTTPoison,
         [request: fn(_method, _url, _body, _headers) -> MockResponse.void_non_existent_id end] do
-          assert {:error, response} = ANet.void(@void_id, @opts)
+          assert {:error, response} = ANet.void(@void_invalid_id, @opts)
           assert response.params["createTransactionResponse"]["messages"]["resultCode"] == "Error"
       end
     end
@@ -211,6 +221,14 @@ defmodule Gringotts.Gateways.AuthorizeNetTest do
           assert {:error, response} = ANet.store(@card, @opts_store_no_profile)
           assert response.params["createCustomerProfileResponse"]["messages"]["resultCode"] == "Error"
      end
+    end
+
+    test "with customer profile id" do
+      with_mock HTTPoison,
+        [request: fn(_method, _url, _body, _headers) -> MockResponse.customer_payment_profile_success_response end] do
+          assert {:ok, response} = ANet.store(@card, @opts_customer_profile)
+          assert response.params["createCustomerPaymentProfileResponse"]["messages"]["resultCode"] == "Ok"
+      end
     end
   end
 
